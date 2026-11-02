@@ -66,6 +66,7 @@ let lastMode = null;
 let hideTimer = null;
 let visible = false;
 let requestInFlight = false;
+let finishedTarget = null;
 
 function pad2(n){ return String(n).padStart(2,'0'); }
 
@@ -153,19 +154,28 @@ async function tick(){
     return;
   }
 
-  // ✅ AQUI está a correção principal:
-  // Ao detectar "running", mostra imediatamente SEM precisar reiniciar
-  showImmediate();
+  // Reset end-of-countdown latch only when a new target is started.
+  const targetKey = String(state.target_epoch_ms ?? state.target_time);
+  if (finishedTarget !== null && finishedTarget !== targetKey) finishedTarget = null;
 
   // calcula diff
   const diff = BroadcastSync.remaining(state);
+  if (diff <= 0) {
+    if (finishedTarget !== targetKey) {
+      finishedTarget = targetKey;
+      timerEl.textContent = "00:00:00";
+      hideFade();
+    }
+    return;
+  }
+  if (finishedTarget === targetKey) return;
+  showImmediate();
 
   const out = formatBig(diff);
   timerEl.textContent = out.text;
   timerEl.classList.toggle("days", out.days);
 
-  // No BIG: não some quando chega em zero. Fica 00:00:00 ou 0D:00:00:00
-  // Então não fazemos fade-out aqui.
+  // BIG fades out at zero, while STAGE continues overtime.
 
   lastMode = state.mode;
   lastTarget = state.target_time;
