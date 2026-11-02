@@ -1,0 +1,495 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8" />
+<title>Countdown Control</title>
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+
+<style>
+:root{
+  --bg:#151515;
+  --panel:#1e1e1e;
+  --muted:#a8a8a8;
+  --line:#2a2a2a;
+  --btn:#2b2b2b;
+  --btnHover:#3a3a3a;
+  --danger:#b23b3b;
+  --dangerHover:#c64a4a;
+  --okbg: rgba(45,122,70,0.15);
+  --okbd: #2f6a43;
+  --oktx: #d7ffe1;
+  --chip:#111;
+}
+
+*{ box-sizing:border-box; }
+
+html, body{
+  margin:0;
+  width:100%;
+  height:100%;
+  background:var(--bg);
+  color:#fff;
+  font-family:Arial, Helvetica, sans-serif;
+  overflow:hidden;
+}
+
+.wrap{ padding:12px; }
+.card{
+  background:var(--panel);
+  border:1px solid var(--line);
+  border-radius:12px;
+  padding:12px;
+  max-width: 680px;
+  margin: 0 auto;
+}
+
+/* ===== HEADER (responsive) ===== */
+.header{
+  display:flex;
+  align-items:center;
+  justify-content:space-between;
+  gap:10px;
+  margin-bottom:12px;
+  flex-wrap:wrap;
+}
+
+.header-left{
+  display:flex;
+  align-items:center;
+  gap:8px;
+  min-width: 0;
+  flex: 1 1 auto;
+}
+
+.clock,.countdown{
+  font-weight:900;
+  letter-spacing:1px;
+  background:var(--chip);
+  border:1px solid var(--line);
+  border-radius:10px;
+
+  padding: clamp(6px, 1.1vw, 9px) clamp(8px, 1.4vw, 12px);
+  font-size: clamp(12px, 1.8vw, 16px);
+
+  min-width: 0;
+  width: auto;
+  text-align:center;
+  flex: 0 0 auto;
+
+  white-space:nowrap;
+  overflow:hidden;
+  text-overflow:ellipsis;
+}
+
+.clock{ width: clamp(92px, 22vw, 120px); }
+.countdown{ width: clamp(140px, 34vw, 220px); } /* maior pois pode ter XD:HH:MM:SS */
+
+.status{
+  font-size: clamp(11px, 1.6vw, 12px);
+  color:var(--muted);
+  border:1px solid var(--line);
+  padding: 6px 10px;
+  border-radius:999px;
+
+  max-width: 38%;
+  min-width: 86px;
+
+  white-space:nowrap;
+  overflow:hidden;
+  text-overflow:ellipsis;
+  text-align:center;
+}
+
+.status.running{
+  color:var(--oktx);
+  border-color:var(--okbd);
+  background: var(--okbg);
+}
+
+@media (max-width: 360px){
+  .status{
+    max-width: 100%;
+    flex: 1 1 100%;
+  }
+}
+
+/* ===== MODE ===== */
+.modeRow{
+  display:flex;
+  gap:10px;
+  margin-bottom:10px;
+}
+
+.modeBtn{
+  flex:1;
+  padding: clamp(10px, 1.8vw, 12px);
+  border-radius:12px;
+  border:1px solid var(--line);
+  background:#171717;
+  color:#fff;
+  cursor:pointer;
+  font-size: clamp(13px, 2vw, 14px);
+  font-weight:800;
+}
+
+.modeBtn.active{
+  outline:2px solid #4b4b4b;
+  background:#1b1b1b;
+}
+
+.sub{
+  font-size: clamp(11px, 1.6vw, 12px);
+  color:var(--muted);
+  margin-top:4px;
+  font-weight:700;
+}
+
+/* ===== FORMS ===== */
+label{
+  display:block;
+  font-size: clamp(12px, 1.7vw, 13px);
+  color:var(--muted);
+  margin-top:10px;
+}
+
+input{
+  width:100%;
+  margin-top:6px;
+  padding: clamp(10px, 1.7vw, 12px);
+  border-radius:12px;
+  border:1px solid var(--line);
+  background:#111;
+  color:#fff;
+  font-size: clamp(14px, 2vw, 16px);
+  outline:none;
+}
+
+.smallhint{
+  font-size: clamp(11px, 1.6vw, 12px);
+  color:#8c8c8c;
+  margin-top:6px;
+  line-height:1.35;
+}
+
+input[type="datetime-local"]::-webkit-calendar-picker-indicator{
+  filter: invert(1);
+  opacity: 0.9;
+  cursor:pointer;
+}
+
+/* ===== BUTTONS ===== */
+.row{
+  display:flex;
+  gap:10px;
+  margin-top:14px;
+}
+
+button{
+  width:100%;
+  padding: clamp(10px, 2vw, 12px);
+  border-radius:14px;
+  border:0;
+  background:var(--btn);
+  color:#fff;
+  cursor:pointer;
+  font-weight:900;
+  font-size: clamp(14px, 2.2vw, 16px);
+}
+
+button:hover{ background:var(--btnHover); }
+.danger{ background:var(--danger); }
+.danger:hover{ background:var(--dangerHover); }
+
+.err{
+  margin-top:10px;
+  font-size: clamp(12px, 1.8vw, 13px);
+  color:#ffb3b3;
+  display:none;
+}
+
+/* COMPACT para docks baixos */
+@media (max-height: 520px){
+  .wrap{ padding:10px; }
+  .card{ padding:10px; border-radius:10px; }
+  .modeRow{ margin-bottom:8px; }
+  label{ margin-top:8px; }
+  input{ padding: 10px; border-radius:10px; }
+  .row{ margin-top:12px; }
+  button{ padding: 10px; border-radius:12px; }
+  .smallhint{ display:none; } /* economiza altura */
+}
+</style>
+</head>
+
+<body>
+<div class="wrap">
+  <div class="card">
+
+    <div class="header">
+      <div class="header-left">
+        <div class="clock" id="clock">--:--:--</div>
+        <div class="countdown" id="cd">--:--:--</div>
+      </div>
+      <div class="status" id="status" title="idle">idle</div>
+    </div>
+
+    <div class="modeRow">
+      <button class="modeBtn active" id="btnDur" type="button">
+        Duração
+        <div class="sub">HH:MM:SS</div>
+      </button>
+      <button class="modeBtn" id="btnTime" type="button">
+        To time
+        <div class="sub">horário alvo</div>
+      </button>
+    </div>
+
+    <div id="panelDur">
+      <label>Duração (HH:MM:SS)</label>
+      <input id="duration" type="text" inputmode="text" autocomplete="off" placeholder="00:00:00" value="00:00:00">
+      <div class="smallhint">Ex: 00:10:00 • 01:30:00</div>
+    </div>
+
+    <div id="panelTime" style="display:none;">
+      <label>Horário alvo</label>
+      <input type="datetime-local" id="time">
+      <div class="smallhint">Usa o horário local do computador.</div>
+    </div>
+
+    <label>Mostrar no display quando faltar (MM:SS)</label>
+    <input id="show" type="text" inputmode="text" autocomplete="off" placeholder="03:00" value="03:00">
+    <div class="smallhint">Deixe em branco para nunca mostrar no display.</div>
+
+    <div class="row">
+      <button id="btnStart" type="button">START</button>
+      <button id="btnStop" type="button" class="danger">STOP</button>
+      <button id="btnReset" type="button">RESET</button>
+    </div>
+
+    <div class="err" id="err"></div>
+
+  </div>
+</div>
+
+<script>
+const elClock = document.getElementById("clock");
+const elCd = document.getElementById("cd");
+const elStatus = document.getElementById("status");
+const elErr = document.getElementById("err");
+
+const btnDur = document.getElementById("btnDur");
+const btnTime = document.getElementById("btnTime");
+const panelDur = document.getElementById("panelDur");
+const panelTime = document.getElementById("panelTime");
+
+const inpDuration = document.getElementById("duration");
+const inpTime = document.getElementById("time");
+const inpShow = document.getElementById("show");
+
+const btnStart = document.getElementById("btnStart");
+const btnStop = document.getElementById("btnStop");
+const btnReset = document.getElementById("btnReset");
+
+let mode = "duration";
+let localMode = "idle";
+let pollInFlight = false;
+
+// preview do countdown no mesmo formato do BIG
+let cdUseDays = false;
+let cdLastTarget = null;
+
+function pad2(n){ return String(n).padStart(2,"0"); }
+
+function setErr(msg){
+  if (!msg){
+    elErr.style.display = "none";
+    elErr.textContent = "";
+  } else {
+    elErr.style.display = "block";
+    elErr.textContent = msg;
+  }
+}
+
+function setStatusUI(m){
+  localMode = m || "idle";
+  elStatus.textContent = localMode;
+  elStatus.title = localMode;
+  elStatus.classList.toggle("running", localMode === "running");
+}
+
+function setMode(m){
+  mode = m;
+  btnDur.classList.toggle("active", m==="duration");
+  btnTime.classList.toggle("active", m==="totime");
+  panelDur.style.display = (m==="duration") ? "block" : "none";
+  panelTime.style.display = (m==="totime") ? "block" : "none";
+  if (m==="duration") inpTime.value = "";
+  if (m==="totime") inpDuration.value = "00:00:00";
+}
+
+function parseHMS_toSeconds(s){
+  const m = String(s||"").trim().match(/^(\d{1,2}):([0-5]\d):([0-5]\d)$/);
+  if (!m) return null;
+  return Number(m[1])*3600 + Number(m[2])*60 + Number(m[3]);
+}
+
+function parseMS_toSeconds(s){
+  const raw = String(s||"").trim();
+  if (raw === "") return null;
+  const m = raw.match(/^(\d{1,2}):([0-5]\d)$/);
+  if (!m) return null;
+  return Number(m[1])*60 + Number(m[2]);
+}
+
+function toLocalISOString(d){
+  return `${d.getFullYear()}-${pad2(d.getMonth()+1)}-${pad2(d.getDate())}T${pad2(d.getHours())}:${pad2(d.getMinutes())}:${pad2(d.getSeconds())}`;
+}
+
+function fmtControlCountdown(ms){
+  const t = Math.max(0, Math.floor(ms/1000));
+
+  if (cdUseDays){
+    const days = Math.floor(t / 86400);
+    const rem = t % 86400;
+    const hh = Math.floor(rem / 3600);
+    const mm = Math.floor((rem % 3600) / 60);
+    const ss = rem % 60;
+    return `${days}D:${pad2(hh)}:${pad2(mm)}:${pad2(ss)}`;
+  }
+
+  const hh = Math.floor(t / 3600);
+  const mm = Math.floor((t % 3600) / 60);
+  const ss = t % 60;
+  return `${pad2(hh)}:${pad2(mm)}:${pad2(ss)}`;
+}
+
+async function getState(){
+  const r = await fetch("state.json?t="+Date.now(), { cache:"no-store" });
+  return await r.json();
+}
+
+async function postState(o){
+  await fetch("api.php", {
+    method:"POST",
+    headers:{ "Content-Type":"application/json" },
+    body: JSON.stringify(o)
+  });
+}
+
+async function start(){
+  setErr("");
+
+  const showSecs = parseMS_toSeconds(inpShow.value);
+  if (inpShow.value.trim() !== "" && showSecs === null){
+    return setErr('Formato inválido em "Mostrar": use MM:SS (ex: 03:00).');
+  }
+
+  let targetIso = null;
+
+  if (mode === "duration") {
+    const total = parseHMS_toSeconds(inpDuration.value);
+    if (total === null) return setErr('Formato inválido em "Duração": use HH:MM:SS (ex: 00:10:00).');
+    if (total <= 0) return setErr('A "Duração" precisa ser maior que 00:00:00.');
+    targetIso = toLocalISOString(new Date(Date.now() + total*1000));
+  } else {
+    if (!inpTime.value) return setErr('Preencha o "Horário alvo".');
+    const targetMs = new Date(inpTime.value).getTime();
+    if (!Number.isFinite(targetMs)) return setErr('Horário alvo inválido.');
+    targetIso = toLocalISOString(new Date(targetMs));
+  }
+
+  setStatusUI("running");
+  const cur = await getState();
+
+  await postState({
+    mode: "running",
+    target_time: targetIso,
+    show_when_seconds: (showSecs == null ? "" : showSecs),
+    stop_signal: cur.stop_signal || 0
+  });
+}
+
+async function stop(){
+  setErr("");
+  setStatusUI("idle");
+  const cur = await getState();
+  await postState({
+    mode: "idle",
+    target_time: null,
+    show_when_seconds: cur.show_when_seconds ?? "",
+    stop_signal: (cur.stop_signal || 0) + 1
+  });
+}
+
+async function resetAll(){
+  setErr("");
+  inpDuration.value = "00:00:00";
+  inpTime.value = "";
+  inpShow.value = "03:00";
+  setMode("duration");
+  setStatusUI("idle");
+
+  const cur = await getState();
+  await postState({
+    mode: "idle",
+    target_time: null,
+    show_when_seconds: "180",
+    stop_signal: (cur.stop_signal || 0) + 1
+  });
+}
+
+function updateClock(){
+  const d = new Date();
+  elClock.textContent = `${pad2(d.getHours())}:${pad2(d.getMinutes())}:${pad2(d.getSeconds())}`;
+}
+setInterval(updateClock, 1000);
+updateClock();
+
+async function poll(){
+  if (pollInFlight) return;
+  pollInFlight = true;
+
+  try{
+    const s = await getState();
+
+    const serverMode = s.mode || "idle";
+    if (serverMode !== localMode) setStatusUI(serverMode);
+
+    if (serverMode !== "running" || !s.target_time){
+      elCd.textContent = "--:--:--";
+      cdUseDays = false;
+      cdLastTarget = null;
+      return;
+    }
+
+    const [datePart, timePart] = String(s.target_time).split("T");
+    const [Y,M,D] = datePart.split("-").map(Number);
+    const [hh,mm,ss] = timePart.split(":").map(Number);
+    const targetMs = new Date(Y, M-1, D, hh, mm, ss || 0).getTime();
+
+    const diff = targetMs - Date.now();
+
+    // trava modo dias por target
+    if (s.target_time !== cdLastTarget){
+      cdLastTarget = s.target_time;
+      cdUseDays = false;
+    }
+    if (diff >= 86400000) cdUseDays = true;
+
+    elCd.textContent = fmtControlCountdown(diff);
+  }catch{
+  }finally{
+    pollInFlight = false;
+  }
+}
+setInterval(poll, 300);
+poll();
+
+btnDur.addEventListener("click", () => setMode("duration"));
+btnTime.addEventListener("click", () => setMode("totime"));
+btnStart.addEventListener("click", start);
+btnStop.addEventListener("click", stop);
+btnReset.addEventListener("click", resetAll);
+</script>
+</body>
+</html>

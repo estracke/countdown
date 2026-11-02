@@ -1,0 +1,315 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8" />
+<title>Countdown Control</title>
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<style>
+  :root{
+    --bg:#151515;
+    --panel:#1e1e1e;
+    --muted:#a8a8a8;
+    --line:#2a2a2a;
+    --btn:#2b2b2b;
+    --btnHover:#3a3a3a;
+    --danger:#b23b3b;
+    --dangerHover:#c64a4a;
+  }
+
+  body{
+    margin:0;
+    font-family: Arial, Helvetica, sans-serif;
+    background: var(--bg);
+    color:#fff;
+  }
+
+  .wrap{
+    padding:14px;
+  }
+
+  .card{
+    background: var(--panel);
+    border: 1px solid var(--line);
+    border-radius: 12px;
+    padding: 12px;
+  }
+
+  .title{
+    display:flex;
+    align-items:center;
+    justify-content:space-between;
+    gap:10px;
+    margin-bottom:10px;
+  }
+  .title h2{
+    margin:0;
+    font-size:15px;
+    font-weight:700;
+  }
+  .pill{
+    font-size:11px;
+    color: var(--muted);
+    border: 1px solid var(--line);
+    padding: 4px 8px;
+    border-radius: 999px;
+  }
+
+  .modeRow{
+    display:flex;
+    gap:10px;
+    margin-top:8px;
+    margin-bottom:10px;
+  }
+  .modeBtn{
+    flex:1;
+    padding:10px;
+    border-radius:10px;
+    border:1px solid var(--line);
+    background: #171717;
+    color:#fff;
+    cursor:pointer;
+    font-size:13px;
+    font-weight:700;
+  }
+  .modeBtn.active{
+    outline: 2px solid #4b4b4b;
+    background:#1b1b1b;
+  }
+  .sub{
+    font-size:12px;
+    color: var(--muted);
+    margin-top:2px;
+    line-height:1.35;
+  }
+
+  label{
+    display:block;
+    font-size:12px;
+    color: var(--muted);
+    margin-top:10px;
+  }
+
+  input{
+    width:100%;
+    box-sizing:border-box;
+    margin-top:6px;
+    padding:10px;
+    border-radius:10px;
+    border:1px solid var(--line);
+    background:#111;
+    color:#fff;
+    font-size:14px;
+    outline:none;
+  }
+
+  .row{
+    display:flex;
+    gap:10px;
+    margin-top:12px;
+  }
+
+  button{
+    width:100%;
+    padding:10px;
+    border-radius:10px;
+    border:0;
+    background: var(--btn);
+    color:#fff;
+    cursor:pointer;
+    font-weight:800;
+    font-size:14px;
+  }
+  button:hover{ background: var(--btnHover); }
+
+  .danger{
+    background: var(--danger);
+  }
+  .danger:hover{
+    background: var(--dangerHover);
+  }
+
+  .disabled{
+    opacity:.45;
+    pointer-events:none;
+  }
+
+  .hint{
+    margin-top:10px;
+    font-size:12px;
+    color: var(--muted);
+    line-height:1.35;
+  }
+</style>
+</head>
+
+<body>
+<div class="wrap">
+  <div class="card">
+    <div class="title">
+      <h2>Countdown</h2>
+      <div class="pill" id="status">status: —</div>
+    </div>
+
+    <div class="modeRow">
+      <button class="modeBtn active" id="btnModeMinutes" onclick="setMode('minutes')">
+        X minutos
+        <div class="sub">conta a partir de agora</div>
+      </button>
+      <button class="modeBtn" id="btnModeTime" onclick="setMode('time')">
+        To time
+        <div class="sub">vai até um horário alvo</div>
+      </button>
+    </div>
+
+    <div id="panelMinutes">
+      <label>Duração (minutos)</label>
+      <input type="number" id="minutes" min="1" placeholder="Ex: 10">
+    </div>
+
+    <div id="panelTime" style="display:none;">
+      <label>Horário alvo (data e hora)</label>
+      <input type="datetime-local" id="time">
+    </div>
+
+    <label>Mostrar quando faltar (minutos)</label>
+    <input type="number" id="show" min="0" value="3">
+
+    <div class="row">
+      <button onclick="start()">START</button>
+      <button class="danger" onclick="stop()">STOP</button>
+      <button onclick="resetAll()">RESET</button>
+    </div>
+
+    <div class="hint">
+      • <b>STOP</b> esconde o timer com fade-out (não apaga os campos).<br>
+      • <b>RESET</b> zera tudo (servidor + campos).<br>
+      • “X minutos” e “To time” são modos exclusivos.
+    </div>
+  </div>
+</div>
+
+<script>
+let mode = "minutes";
+
+// helper: ISO local sem UTC/Z
+function toLocalISOString(d){
+  const pad = n => String(n).padStart(2,"0");
+  return (
+    d.getFullYear() + "-" +
+    pad(d.getMonth()+1) + "-" +
+    pad(d.getDate()) + "T" +
+    pad(d.getHours()) + ":" +
+    pad(d.getMinutes()) + ":" +
+    pad(d.getSeconds())
+  );
+}
+
+function setMode(m){
+  mode = m;
+
+  const bM = document.getElementById("btnModeMinutes");
+  const bT = document.getElementById("btnModeTime");
+  const pM = document.getElementById("panelMinutes");
+  const pT = document.getElementById("panelTime");
+
+  if (m === "minutes") {
+    bM.classList.add("active");
+    bT.classList.remove("active");
+    pM.style.display = "block";
+    pT.style.display = "none";
+    // limpa o outro para evitar conflito
+    document.getElementById("time").value = "";
+  } else {
+    bT.classList.add("active");
+    bM.classList.remove("active");
+    pT.style.display = "block";
+    pM.style.display = "none";
+    // limpa o outro para evitar conflito
+    document.getElementById("minutes").value = "";
+  }
+}
+
+async function postState(obj){
+  await fetch("api.php", {
+    method:"POST",
+    headers:{ "Content-Type":"application/json" },
+    body: JSON.stringify(obj)
+  });
+}
+
+// lê o estado para pegar stop_signal atual (pra incrementar no STOP)
+async function getState(){
+  const res = await fetch("state.json?t=" + Date.now(), { cache:"no-store" });
+  return await res.json();
+}
+
+async function start(){
+  const show = Number(document.getElementById("show").value || 0);
+  let target_time = null;
+
+  if (mode === "minutes") {
+    const mins = Number(document.getElementById("minutes").value || 0);
+    if (!(mins > 0)) return;
+    const d = new Date(Date.now() + mins * 60000);
+    target_time = toLocalISOString(d);
+  } else {
+    const val = document.getElementById("time").value;
+    if (!val) return;
+    const d = new Date(val); // já é local
+    target_time = toLocalISOString(d);
+  }
+
+  const cur = await getState();
+  await postState({
+    mode: "running",
+    target_time,
+    show_when_minutes: show,
+    stop_signal: cur.stop_signal || 0
+  });
+  updateStatus("status: running");
+}
+
+async function stop(){
+  const cur = await getState();
+  await postState({
+    mode: "idle",
+    target_time: null,
+    show_when_minutes: cur.show_when_minutes ?? 3,
+    stop_signal: (cur.stop_signal || 0) + 1
+  });
+  updateStatus("status: stopped");
+}
+
+async function resetAll(){
+  // limpa campos + volta modo default
+  document.getElementById("minutes").value = "";
+  document.getElementById("time").value = "";
+  document.getElementById("show").value = "3";
+  setMode("minutes");
+
+  const cur = await getState();
+  await postState({
+    mode: "idle",
+    target_time: null,
+    show_when_minutes: 3,
+    stop_signal: (cur.stop_signal || 0) + 1
+  });
+  updateStatus("status: reset");
+}
+
+function updateStatus(txt){
+  document.getElementById("status").textContent = txt;
+}
+
+// status “ao vivo”
+async function pollStatus(){
+  try{
+    const s = await getState();
+    updateStatus("status: " + (s.mode || "—"));
+  }catch{}
+}
+setInterval(pollStatus, 1000);
+pollStatus();
+</script>
+</body>
+</html>

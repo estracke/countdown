@@ -1,0 +1,187 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<title>Countdown Big Display</title>
+
+<style>
+  html, body{
+    margin:0;
+    width:100%;
+    height:100%;
+    background:transparent;
+    font-family: Arial, Helvetica, sans-serif;
+    overflow:hidden;
+  }
+
+  #wrap{
+    position:fixed;
+    inset:0;
+    display:flex;
+    align-items:center;
+    justify-content:center;
+    padding:4vw; /* margem de segurança */
+    box-sizing:border-box;
+  }
+
+  #timer{
+    font-weight:900;
+    letter-spacing:0.05em;
+    color:white;
+    background:rgba(0,0,0,0.65);
+    padding:0.25em 0.45em;
+    border-radius:0.15em;
+
+    opacity:0;
+    display:none;
+    transition:opacity 0.8s ease;
+
+    /* fonte será calculada via JS */
+    font-size:100px;
+    line-height:1;
+    white-space:nowrap;
+  }
+</style>
+</head>
+
+<body>
+<div id="wrap">
+  <div id="timer">00:00:00</div>
+</div>
+
+<script>
+const wrap = document.getElementById("wrap");
+const timer = document.getElementById("timer");
+
+let lastStopSignal = null;
+let lastTarget = null;
+let hasStarted = false;
+let useDays = false;
+
+/* ===== helpers ===== */
+function parseLocalTime(s){
+  const [datePart, timePart] = s.split("T");
+  const [Y,M,D] = datePart.split("-").map(Number);
+  const parts = timePart.split(":").map(Number);
+  const h = parts[0] ?? 0, m = parts[1] ?? 0, sec = parts[2] ?? 0;
+  return new Date(Y, M-1, D, h, m, sec).getTime();
+}
+
+// sempre HH:MM:SS ou DD:HH:MM:SS com D
+function fmt(ms){
+  const t = Math.max(0, Math.floor(ms/1000));
+
+  if (useDays){
+    const days = Math.floor(t / 86400);
+    const rem = t % 86400;
+    const hh = Math.floor(rem / 3600);
+    const mm = Math.floor((rem % 3600) / 60);
+    const ss = rem % 60;
+    return `${days}D:${String(hh).padStart(2,"0")}:${String(mm).padStart(2,"0")}:${String(ss).padStart(2,"0")}`;
+  }
+
+  const hh = Math.floor(t / 3600);
+  const mm = Math.floor((t % 3600) / 60);
+  const ss = t % 60;
+  return `${String(hh).padStart(2,"0")}:${String(mm).padStart(2,"0")}:${String(ss).padStart(2,"0")}`;
+}
+
+function show(){
+  timer.style.display = "block";
+  timer.style.opacity = "0";
+  setTimeout(() => timer.style.opacity = "1", 20);
+}
+
+function hide(){
+  timer.style.opacity = "0";
+  setTimeout(() => { timer.style.display = "none"; }, 900);
+}
+
+/* ===== auto-fit font ===== */
+function fitText(){
+  if (timer.style.display === "none") return;
+
+  const maxW = wrap.clientWidth;
+  const maxH = wrap.clientHeight;
+
+  // limites seguros (evita ficar pequeno demais ou gigante demais)
+  let low = 10;
+  let high = 2000;
+  let best = 100;
+
+  // busca binária para maior font-size que cabe
+  while (low <= high){
+    const mid = Math.floor((low + high) / 2);
+    timer.style.fontSize = mid + "px";
+
+    const rect = timer.getBoundingClientRect();
+    const fits = rect.width <= maxW && rect.height <= maxH;
+
+    if (fits){
+      best = mid;
+      low = mid + 1;
+    } else {
+      high = mid - 1;
+    }
+  }
+
+  timer.style.fontSize = best + "px";
+}
+
+/* ===== main loop ===== */
+async function tick(){
+  let state;
+  try{
+    const res = await fetch("state.json?t=" + Date.now(), { cache:"no-store" });
+    state = await res.json();
+  }catch{
+    return;
+  }
+
+  // STOP explícito do operador
+  if (lastStopSignal === null) lastStopSignal = state.stop_signal ?? 0;
+  if ((state.stop_signal ?? 0) !== lastStopSignal){
+    lastStopSignal = state.stop_signal ?? 0;
+    hasStarted = false;
+    useDays = false;
+    hide();
+    return;
+  }
+
+  // Novo START (novo target_time)
+  if (state.target_time && state.target_time !== lastTarget){
+    lastTarget = state.target_time;
+    hasStarted = true;
+    useDays = false;
+    if (timer.style.display === "none") show();
+  }
+
+  // se nunca iniciou, não mostra nada
+  if (!hasStarted || !state.target_time){
+    return;
+  }
+
+  const target = parseLocalTime(state.target_time);
+  const diff = target - Date.now();
+
+  // trava dias se começar >= 24h
+  if (diff >= 86400000) useDays = true;
+
+  const text = fmt(diff);
+
+  // só recalcula fit se o texto mudou (economiza CPU)
+  if (timer.textContent !== text){
+    timer.textContent = text;
+    fitText();
+  }
+}
+
+// refit se redimensionar (OBS muda resolução às vezes)
+window.addEventListener("resize", () => fitText());
+
+setInterval(tick, 200);
+tick();
+</script>
+
+</body>
+</html>

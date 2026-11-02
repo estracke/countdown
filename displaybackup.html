@@ -1,0 +1,187 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<title>Countdown Display</title>
+
+<style>
+  body {
+    margin:0;
+    background:transparent;
+    font-family: Arial, Helvetica, sans-serif;
+  }
+
+  #box{
+    position:fixed;
+    bottom:40px;
+    left:40px;
+
+    background:rgba(0,0,0,0.65);
+    color:white;
+    padding:20px 28px;
+    border-radius:10px;
+    font-size:72px;
+    font-weight:bold;
+    letter-spacing:2px;
+
+    display:none;
+    opacity:0;
+    transition: opacity 1s ease;
+  }
+</style>
+</head>
+
+<body>
+
+<div id="box">0:00</div>
+
+<script>
+const box = document.getElementById("box");
+
+let finished = false;
+let wasVisible = false;     // ⭐ controla fade out
+let lastMode = null;
+let lastTarget = null;
+let lastShow = null;
+let lastStopSignal = null;
+let postedIdle = false;
+
+/* ===== helpers ===== */
+function parseLocalTime(s){
+  const [datePart, timePart] = s.split("T");
+  const [Y,M,D] = datePart.split("-").map(Number);
+  const parts = timePart.split(":").map(Number);
+  const h = parts[0] ?? 0;
+  const m = parts[1] ?? 0;
+  const sec = parts[2] ?? 0;
+  return new Date(Y, M-1, D, h, m, sec).getTime();
+}
+
+function fmt(ms){
+  const t = Math.max(0, Math.floor(ms / 1000));
+
+  if (t >= 3600) {
+    const hh = Math.floor(t / 3600);
+    const mm = Math.floor((t % 3600) / 60);
+    const ss = t % 60;
+    return `${String(hh).padStart(2,"0")}:${String(mm).padStart(2,"0")}:${String(ss).padStart(2,"0")}`;
+  }
+
+  const mm = Math.floor(t / 60);
+  const ss = t % 60;
+
+  if (t < 600) return `${mm}:${String(ss).padStart(2,"0")}`;
+  return `${String(mm).padStart(2,"0")}:${String(ss).padStart(2,"0")}`;
+}
+
+function showFadeIn(){
+  box.style.display = "block";
+  box.style.opacity = "0";
+  setTimeout(() => box.style.opacity = "1", 20);
+  wasVisible = true; // ⭐ marca que apareceu
+}
+
+function hideVisualOnly(){
+  box.style.display = "none";
+  box.style.opacity = "0";
+}
+
+function fadeOutThenHide(){
+  box.style.opacity = "0";
+  setTimeout(hideVisualOnly, 1100);
+}
+
+async function postIdle(show_when_minutes, stop_signal){
+  try{
+    await fetch("api.php", {
+      method: "POST",
+      headers: { "Content-Type":"application/json" },
+      body: JSON.stringify({
+        mode: "idle",
+        target_time: null,
+        show_when_minutes: show_when_minutes,
+        stop_signal: stop_signal || 0
+      })
+    });
+  }catch{}
+}
+
+/* ===== main loop ===== */
+async function tick(){
+  let state;
+  try{
+    const res = await fetch("state.json?t=" + Date.now(), { cache:"no-store" });
+    state = await res.json();
+  }catch{
+    return;
+  }
+
+  const showMin = Number(state.show_when_minutes);
+  const canShow = showMin > 0;
+
+  /* STOP via painel */
+  if (lastStopSignal === null) lastStopSignal = state.stop_signal ?? 0;
+  if ((state.stop_signal ?? 0) !== lastStopSignal){
+    lastStopSignal = state.stop_signal ?? 0;
+    finished = false;
+    wasVisible = false;
+    postedIdle = false;
+    if (box.style.display !== "none") fadeOutThenHide();
+    return;
+  }
+
+  /* novo start/reset */
+  const changed =
+    state.mode !== lastMode ||
+    state.target_time !== lastTarget ||
+    state.show_when_minutes !== lastShow;
+
+  if (changed){
+    finished = false;
+    wasVisible = false;
+    postedIdle = false;
+    hideVisualOnly();
+    lastMode = state.mode;
+    lastTarget = state.target_time;
+    lastShow = state.show_when_minutes;
+  }
+
+  if (state.mode !== "running" || !state.target_time){
+    return;
+  }
+
+  if (finished) return;
+
+  const target = parseLocalTime(state.target_time);
+  const diff = target - Date.now();
+  const showMs = showMin * 60000;
+
+  box.textContent = fmt(diff);
+
+  /* Fade IN somente se permitido */
+  if (canShow && diff > 0 && diff <= showMs) {
+    if (box.style.display === "none") showFadeIn();
+  }
+
+  /* FINAL */
+  if (diff <= 0){
+    finished = true;
+
+    // ⭐ Fade out SOMENTE se chegou a aparecer
+    if (canShow && wasVisible){
+      setTimeout(fadeOutThenHide, 400);
+    }
+
+    if (!postedIdle){
+      postedIdle = true;
+      postIdle(state.show_when_minutes, state.stop_signal);
+    }
+  }
+}
+
+setInterval(tick, 300);
+tick();
+</script>
+
+</body>
+</html>

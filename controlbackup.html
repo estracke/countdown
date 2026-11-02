@@ -1,0 +1,311 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8" />
+<title>Countdown Control</title>
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+
+<style>
+:root{
+  --bg:#151515;
+  --panel:#1e1e1e;
+  --muted:#a8a8a8;
+  --line:#2a2a2a;
+  --btn:#2b2b2b;
+  --btnHover:#3a3a3a;
+  --danger:#b23b3b;
+  --dangerHover:#c64a4a;
+}
+
+body{ margin:0; font-family:Arial, Helvetica, sans-serif; background:var(--bg); color:#fff; }
+.wrap{ padding:14px; }
+.card{ background:var(--panel); border:1px solid var(--line); border-radius:12px; padding:12px; }
+
+.header{ display:flex; align-items:center; justify-content:space-between; gap:10px; margin-bottom:12px; }
+.header-left{ display:flex; align-items:center; gap:10px; }
+
+.clock,.countdown{
+  font-size:13px; font-weight:800; letter-spacing:1px;
+  background:#111; border:1px solid var(--line); border-radius:8px;
+  padding:6px 10px; min-width:86px; text-align:center;
+}
+
+.status{
+  font-size:11px; color:var(--muted);
+  border:1px solid var(--line);
+  padding:4px 10px; border-radius:999px;
+}
+.status.running{
+  color:#d7ffe1;
+  border-color:#2f6a43;
+  background: rgba(45,122,70,0.15);
+}
+
+.modeRow{ display:flex; gap:10px; margin-bottom:10px; }
+.modeBtn{
+  flex:1; padding:10px; border-radius:10px;
+  border:1px solid var(--line); background:#171717; color:#fff;
+  cursor:pointer; font-size:13px; font-weight:700;
+}
+.modeBtn.active{ outline:2px solid #4b4b4b; background:#1b1b1b; }
+.sub{ font-size:12px; color:var(--muted); margin-top:2px; }
+
+label{ display:block; font-size:12px; color:var(--muted); margin-top:10px; }
+input{
+  width:100%; box-sizing:border-box; margin-top:6px; padding:10px;
+  border-radius:10px; border:1px solid var(--line);
+  background:#111; color:#fff; font-size:14px; outline:none;
+}
+input[type="datetime-local"]::-webkit-calendar-picker-indicator{
+  filter: invert(1);
+  opacity: 0.9;
+  cursor:pointer;
+}
+
+.row{ display:flex; gap:10px; margin-top:14px; }
+button{
+  width:100%; padding:10px; border-radius:10px; border:0;
+  background:var(--btn); color:#fff; cursor:pointer;
+  font-weight:800; font-size:14px;
+}
+button:hover{ background:var(--btnHover); }
+.danger{ background:var(--danger); }
+.danger:hover{ background:var(--dangerHover); }
+
+.hint{ margin-top:10px; font-size:12px; color:var(--muted); line-height:1.35; }
+</style>
+</head>
+
+<body>
+<div class="wrap">
+  <div class="card">
+
+    <div class="header">
+      <div class="header-left">
+        <div class="clock" id="clock">--:--:--</div>
+        <div class="countdown" id="cd">--:--</div>
+      </div>
+      <div class="status" id="status">idle</div>
+    </div>
+
+    <div class="modeRow">
+      <button class="modeBtn active" id="btnMin" type="button">
+        X minutos
+        <div class="sub">a partir de agora</div>
+      </button>
+      <button class="modeBtn" id="btnTime" type="button">
+        To time
+        <div class="sub">horário alvo</div>
+      </button>
+    </div>
+
+    <div id="panelMinutes">
+      <label>Duração (minutos)</label>
+      <input type="number" id="minutes" min="1" placeholder="Ex: 10">
+    </div>
+
+    <div id="panelTime" style="display:none;">
+      <label>Horário alvo</label>
+      <input type="datetime-local" id="time">
+    </div>
+
+    <label>Mostrar no display quando faltar (min)</label>
+    <input type="number" id="show" min="0" value="3">
+
+    <div class="row">
+      <button id="btnStart" type="button">START</button>
+      <button id="btnStop" type="button" class="danger">STOP</button>
+      <button id="btnReset" type="button">RESET</button>
+    </div>
+
+    <div class="hint">
+      • Countdown no painel aparece sempre quando estiver rodando.<br>
+      • STOP manda o display fazer fade-out (via stop_signal).<br>
+      • RESET limpa campos + zera estado.
+    </div>
+
+  </div>
+</div>
+
+<script>
+/* ===== ELEMENTOS ===== */
+const elClock = document.getElementById("clock");
+const elCd = document.getElementById("cd");
+const elStatus = document.getElementById("status");
+
+const btnMin = document.getElementById("btnMin");
+const btnTime = document.getElementById("btnTime");
+
+const panelMinutes = document.getElementById("panelMinutes");
+const panelTime = document.getElementById("panelTime");
+
+const inpMinutes = document.getElementById("minutes");
+const inpTime = document.getElementById("time");
+const inpShow = document.getElementById("show");
+
+const btnStart = document.getElementById("btnStart");
+const btnStop = document.getElementById("btnStop");
+const btnReset = document.getElementById("btnReset");
+
+/* ===== STATE ===== */
+let mode = "minutes";
+let localMode = "idle";
+let pollInFlight = false;
+
+/* ===== HELPERS ===== */
+function toLocalISOString(d){
+  const p=n=>String(n).padStart(2,"0");
+  return `${d.getFullYear()}-${p(d.getMonth()+1)}-${p(d.getDate())}T${p(d.getHours())}:${p(d.getMinutes())}:${p(d.getSeconds())}`;
+}
+function parseLocalTime(s){
+  // "YYYY-MM-DDTHH:MM(:SS)" -> Date local
+  const [datePart, timePart] = String(s).split("T");
+  const [Y,M,D] = datePart.split("-").map(Number);
+  const parts = timePart.split(":").map(Number);
+  const h = parts[0] ?? 0, m = parts[1] ?? 0, sec = parts[2] ?? 0;
+  return new Date(Y, M-1, D, h, m, sec).getTime();
+}
+function fmt(ms){
+  const t=Math.max(0,Math.floor(ms/1000));
+  const m=Math.floor(t/60);
+  const s=t%60;
+  return String(m).padStart(2,"0")+":"+String(s).padStart(2,"0");
+}
+
+/* ===== UI ===== */
+function setStatusUI(m){
+  localMode = m || "idle";
+  elStatus.textContent = localMode;
+  elStatus.classList.toggle("running", localMode === "running");
+}
+function setMode(m){
+  mode = m;
+  btnMin.classList.toggle("active", m==="minutes");
+  btnTime.classList.toggle("active", m==="time");
+  panelMinutes.style.display = (m==="minutes") ? "block" : "none";
+  panelTime.style.display = (m==="time") ? "block" : "none";
+
+  // evita conflito (um ou outro)
+  if (m==="minutes") inpTime.value = "";
+  if (m==="time") inpMinutes.value = "";
+}
+
+/* ===== API ===== */
+async function getState(){
+  const r = await fetch("state.json?t="+Date.now(), { cache:"no-store" });
+  return await r.json();
+}
+async function postState(o){
+  await fetch("api.php", {
+    method:"POST",
+    headers:{ "Content-Type":"application/json" },
+    body: JSON.stringify(o)
+  });
+}
+
+/* ===== ACTIONS ===== */
+async function start(){
+  const showMin = Number(inpShow.value || 0);
+  let target = null;
+
+  if (mode === "minutes") {
+    const mins = Number(inpMinutes.value || 0);
+    if (!(mins > 0)) return;
+    target = toLocalISOString(new Date(Date.now() + mins*60000));
+  } else {
+    if (!inpTime.value) return;
+    target = toLocalISOString(new Date(inpTime.value));
+  }
+
+  // feedback imediato
+  setStatusUI("running");
+
+  const cur = await getState();
+  await postState({
+    mode: "running",
+    target_time: target,
+    show_when_minutes: showMin,
+    stop_signal: cur.stop_signal || 0
+  });
+}
+
+async function stop(){
+  // feedback imediato
+  setStatusUI("idle");
+
+  const cur = await getState();
+  await postState({
+    mode: "idle",
+    target_time: null,
+    show_when_minutes: cur.show_when_minutes ?? 3,
+    stop_signal: (cur.stop_signal || 0) + 1
+  });
+}
+
+async function resetAll(){
+  inpMinutes.value = "";
+  inpTime.value = "";
+  inpShow.value = "3";
+  setMode("minutes");
+
+  // feedback imediato
+  setStatusUI("idle");
+
+  const cur = await getState();
+  await postState({
+    mode: "idle",
+    target_time: null,
+    show_when_minutes: 3,
+    stop_signal: (cur.stop_signal || 0) + 1
+  });
+}
+
+/* ===== CLOCK ===== */
+function updateClock(){
+  const d = new Date();
+  elClock.textContent =
+    String(d.getHours()).padStart(2,"0")+":"+
+    String(d.getMinutes()).padStart(2,"0")+":"+
+    String(d.getSeconds()).padStart(2,"0");
+}
+setInterval(updateClock, 1000);
+updateClock();
+
+/* ===== POLL (status + countdown) ===== */
+async function poll(){
+  if (pollInFlight) return;
+  pollInFlight = true;
+
+  try{
+    const s = await getState();
+
+    // atualiza status só se divergir
+    const serverMode = s.mode || "idle";
+    if (serverMode !== localMode) setStatusUI(serverMode);
+
+    if (serverMode !== "running" || !s.target_time){
+      elCd.textContent = "--:--";
+      return;
+    }
+
+    const targetMs = parseLocalTime(s.target_time);
+    const diff = targetMs - Date.now();
+    elCd.textContent = fmt(diff);
+  }catch{
+    // silêncio
+  }finally{
+    pollInFlight = false;
+  }
+}
+setInterval(poll, 300);
+poll();
+
+/* ===== EVENTS ===== */
+btnMin.addEventListener("click", () => setMode("minutes"));
+btnTime.addEventListener("click", () => setMode("time"));
+btnStart.addEventListener("click", start);
+btnStop.addEventListener("click", stop);
+btnReset.addEventListener("click", resetAll);
+</script>
+</body>
+</html>
