@@ -347,7 +347,9 @@ function toLocalISOString(d){
 }
 
 function fmtControlCountdown(ms){
-  const t = Math.max(0, Math.floor(ms/1000));
+  const negative = ms < 0;
+  const t = Math.floor(Math.abs(ms)/1000);
+  const sign = negative ? "-" : "";
 
   if (cdUseDays){
     const days = Math.floor(t / 86400);
@@ -355,13 +357,13 @@ function fmtControlCountdown(ms){
     const hh = Math.floor(rem / 3600);
     const mm = Math.floor((rem % 3600) / 60);
     const ss = rem % 60;
-    return `${days}D:${pad2(hh)}:${pad2(mm)}:${pad2(ss)}`;
+    return `${sign}${days}D:${pad2(hh)}:${pad2(mm)}:${pad2(ss)}`;
   }
 
   const hh = Math.floor(t / 3600);
   const mm = Math.floor((t % 3600) / 60);
   const ss = t % 60;
-  return `${pad2(hh)}:${pad2(mm)}:${pad2(ss)}`;
+  return `${sign}${pad2(hh)}:${pad2(mm)}:${pad2(ss)}`;
 }
 
 async function getState(){
