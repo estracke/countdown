@@ -1,0 +1,179 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Countdown STAGE</title>
+<style>
+  html, body{
+    margin:0;
+    width:100%;
+    height:100%;
+    background:transparent;
+    overflow:hidden;
+    font-family: Arial, Helvetica, sans-serif;
+  }
+
+  /* Centraliza sempre */
+  .wrap{
+    position:fixed;
+    inset:0;
+    display:flex;
+    align-items:center;
+    justify-content:center;
+  }
+
+  /* Caixa do contador */
+  #timer{
+    display:none;           /* começa escondido, mas mostramos automaticamente quando estiver running */
+    opacity:0;
+    transition: opacity 0.6s ease;
+
+    background:rgba(0,0,0,0.55);
+    color:#fff;
+    border-radius: 18px;
+    padding: 2.2vh 3.2vw;
+
+    font-weight: 900;
+    letter-spacing: 0.03em;
+    line-height: 1;
+
+    /* tamanho responsivo pra nunca estourar */
+    font-size: min(12vw, 18vh);
+    max-width: 96vw;
+    text-align:center;
+    white-space: nowrap;
+  }
+
+  /* Um pouco menor quando entra em modo dias (mais caracteres) */
+  #timer.days{
+    font-size: min(10vw, 16vh);
+  }
+</style>
+</head>
+<body>
+  <div class="wrap">
+    <div id="timer">00:00:00</div>
+  </div>
+
+<script src="sync-clock.js"></script>
+<script>
+const timerEl = document.getElementById("timer");
+
+let lastStopSignal = null;
+let lastTarget = null;
+let lastMode = null;
+let hideTimer = null;
+let visible = false;
+let requestInFlight = false;
+
+function pad2(n){ return String(n).padStart(2,'0'); }
+
+function parseLocalISO(s){
+  // s = "YYYY-MM-DDTHH:MM:SS" (sem Z)
+  const [dPart, tPart] = String(s).split("T");
+  const [Y,M,D] = dPart.split("-").map(Number);
+  const parts = tPart.split(":").map(Number);
+  const hh = parts[0] ?? 0;
+  const mm = parts[1] ?? 0;
+  const ss = parts[2] ?? 0;
+  return new Date(Y, M-1, D, hh, mm, ss).getTime();
+}
+
+function formatBig(ms){
+  const total = Math.max(0, Math.floor(ms/1000));
+
+  if (total >= 86400){
+    const days = Math.floor(total / 86400);
+    const rem = total % 86400;
+    const hh = Math.floor(rem / 3600);
+    const mm = Math.floor((rem % 3600) / 60);
+    const ss = rem % 60;
+    return { text: `${days}D:${pad2(hh)}:${pad2(mm)}:${pad2(ss)}`, days:true };
+  } else {
+    const hh = Math.floor(total / 3600);
+    const mm = Math.floor((total % 3600) / 60);
+    const ss = total % 60;
+    return { text: `${pad2(hh)}:${pad2(mm)}:${pad2(ss)}`, days:false };
+  }
+}
+
+function showImmediate(){
+  if (hideTimer !== null) {
+    clearTimeout(hideTimer);
+    hideTimer = null;
+  }
+  if (visible) return;
+  visible = true;
+  timerEl.style.display = "block";
+  timerEl.style.opacity = "0";
+  requestAnimationFrame(() => {
+    if (visible) timerEl.style.opacity = "1";
+  });
+}
+
+function hideFade(){
+  if (!visible) return; // avoid repeated hide timers while idle
+  visible = false;
+  timerEl.style.opacity = "0";
+  if (hideTimer !== null) clearTimeout(hideTimer);
+  hideTimer = setTimeout(() => {
+    hideTimer = null;
+    if (!visible) timerEl.style.display = "none";
+  }, 650);
+}
+
+async function tick(){
+  if (requestInFlight) return;
+  requestInFlight = true;
+  let state;
+  try{
+    state = await BroadcastSync.read();
+  }catch{
+    return;
+  }finally{
+    requestInFlight = false;
+  }
+
+  // inicializa stopSignal sem disparar nada
+  if (lastStopSignal === null) lastStopSignal = state.stop_signal ?? 0;
+
+  // Se recebeu STOP (stop_signal mudou), some
+  if ((state.stop_signal ?? 0) !== lastStopSignal){
+    lastStopSignal = state.stop_signal ?? 0;
+    hideFade();
+    return;
+  }
+
+  // Se não está rodando, esconde
+  if (state.mode !== "running" || !state.target_time){
+    hideFade();
+    lastMode = state.mode;
+    lastTarget = state.target_time;
+    return;
+  }
+
+  // ✅ AQUI está a correção principal:
+  // Ao detectar "running", mostra imediatamente SEM precisar reiniciar
+  showImmediate();
+
+  // calcula diff
+  const diff = BroadcastSync.remaining(state);
+
+  const out = formatBig(Math.abs(diff));
+  const overtime = diff < 0;
+  timerEl.textContent = (overtime ? "-" : "") + out.text;
+  timerEl.style.color = overtime ? "#ff3030" : "#fff";
+  timerEl.classList.toggle("days", out.days);
+
+  // STAGE keeps counting overtime in red, using the same server target.
+
+  lastMode = state.mode;
+  lastTarget = state.target_time;
+}
+
+setInterval(tick, 200);
+tick();
+</script>
+</body>
+</html>
