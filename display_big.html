@@ -56,6 +56,7 @@
     <div id="timer">00:00:00</div>
   </div>
 
+<script src="sync-clock.js"></script>
 <script>
 const timerEl = document.getElementById("timer");
 
@@ -117,8 +118,7 @@ function hideFade(){
 async function tick(){
   let state;
   try{
-    const res = await fetch("state.json?t=" + Date.now(), { cache:"no-store" });
-    state = await res.json();
+    state = await BroadcastSync.read();
   }catch{
     return;
   }
@@ -146,8 +146,7 @@ async function tick(){
   showImmediate();
 
   // calcula diff
-  const targetMs = parseLocalISO(state.target_time);
-  const diff = targetMs - Date.now();
+  const diff = BroadcastSync.remaining(state);
 
   const out = formatBig(diff);
   timerEl.textContent = out.text;
