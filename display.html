@@ -35,6 +35,7 @@
 
 <div id="box">0:00</div>
 
+<script src="sync-clock.js"></script>
 <script>
 const box = document.getElementById("box");
 
@@ -113,8 +114,7 @@ async function postIdle(stop_signal){
 async function tick(){
   let state;
   try{
-    const res = await fetch("state.json?t=" + Date.now(), { cache:"no-store" });
-    state = await res.json();
+    state = await BroadcastSync.read();
   }catch{
     return;
   }
@@ -155,8 +155,7 @@ async function tick(){
 
   if (finished) return;
 
-  const target = parseLocalTime(state.target_time);
-  const diff = target - Date.now();
+  const diff = BroadcastSync.remaining(state);
 
   box.textContent = fmt(diff);
 
@@ -175,7 +174,7 @@ async function tick(){
 
     if (!postedIdle){
       postedIdle = true;
-      postIdle(state.stop_signal);
+      // Display is read-only: BIG must remain visible at zero.
     }
   }
 }
