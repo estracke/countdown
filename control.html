@@ -461,6 +461,7 @@ async function poll(){
 
     if (serverMode !== "running" || !s.target_time){
       elCd.textContent = "--:--:--";
+      elCd.style.color = "#fff";
       cdUseDays = false;
       cdLastTarget = null;
       return;
@@ -476,6 +477,7 @@ async function poll(){
     if (diff >= 86400000) cdUseDays = true;
 
     elCd.textContent = fmtControlCountdown(diff);
+    elCd.style.color = diff < 0 ? "#ff3030" : "#fff";
   }catch{
   }finally{
     pollInFlight = false;
