@@ -63,6 +63,9 @@ const timerEl = document.getElementById("timer");
 let lastStopSignal = null;
 let lastTarget = null;
 let lastMode = null;
+let hideTimer = null;
+let visible = false;
+let requestInFlight = false;
 
 function pad2(n){ return String(n).padStart(2,'0'); }
 
@@ -96,31 +99,40 @@ function formatBig(ms){
 }
 
 function showImmediate(){
-  // Mostra sem depender de "evento start"
-  if (timerEl.style.display !== "block"){
-    timerEl.style.display = "block";
-    timerEl.style.opacity = "0";
-    requestAnimationFrame(() => {
-      timerEl.style.opacity = "1";
-    });
-  } else if (getComputedStyle(timerEl).opacity === "0"){
-    timerEl.style.opacity = "1";
+  if (hideTimer !== null) {
+    clearTimeout(hideTimer);
+    hideTimer = null;
   }
+  if (visible) return;
+  visible = true;
+  timerEl.style.display = "block";
+  timerEl.style.opacity = "0";
+  requestAnimationFrame(() => {
+    if (visible) timerEl.style.opacity = "1";
+  });
 }
 
 function hideFade(){
+  if (!visible) return; // avoid repeated hide timers while idle
+  visible = false;
   timerEl.style.opacity = "0";
-  setTimeout(() => {
-    timerEl.style.display = "none";
+  if (hideTimer !== null) clearTimeout(hideTimer);
+  hideTimer = setTimeout(() => {
+    hideTimer = null;
+    if (!visible) timerEl.style.display = "none";
   }, 650);
 }
 
 async function tick(){
+  if (requestInFlight) return;
+  requestInFlight = true;
   let state;
   try{
     state = await BroadcastSync.read();
   }catch{
     return;
+  }finally{
+    requestInFlight = false;
   }
 
   // inicializa stopSignal sem disparar nada
