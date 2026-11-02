@@ -271,6 +271,7 @@ button:hover{ background:var(--btnHover); }
   </div>
 </div>
 
+<script src="sync-clock.js"></script>
 <script>
 const elClock = document.getElementById("clock");
 const elCd = document.getElementById("cd");
@@ -364,16 +365,16 @@ function fmtControlCountdown(ms){
 }
 
 async function getState(){
-  const r = await fetch("state.json?t="+Date.now(), { cache:"no-store" });
-  return await r.json();
+  return await BroadcastSync.read();
 }
 
 async function postState(o){
-  await fetch("api.php", {
+  const response = await fetch("api.php", {
     method:"POST",
     headers:{ "Content-Type":"application/json" },
     body: JSON.stringify(o)
   });
+  if (!response.ok) throw new Error("Comando não aplicado: HTTP " + response.status);
 }
 
 async function start(){
@@ -390,12 +391,12 @@ async function start(){
     const total = parseHMS_toSeconds(inpDuration.value);
     if (total === null) return setErr('Formato inválido em "Duração": use HH:MM:SS (ex: 00:10:00).');
     if (total <= 0) return setErr('A "Duração" precisa ser maior que 00:00:00.');
-    targetIso = toLocalISOString(new Date(Date.now() + total*1000));
+    targetIso = null;
   } else {
     if (!inpTime.value) return setErr('Preencha o "Horário alvo".');
     const targetMs = new Date(inpTime.value).getTime();
     if (!Number.isFinite(targetMs)) return setErr('Horário alvo inválido.');
-    targetIso = toLocalISOString(new Date(targetMs));
+    targetIso = null;
   }
 
   setStatusUI("running");
@@ -403,7 +404,8 @@ async function start(){
 
   await postState({
     mode: "running",
-    target_time: targetIso,
+    duration_seconds: mode === "duration" ? parseHMS_toSeconds(inpDuration.value) : undefined,
+    target_epoch_ms: mode === "totime" ? new Date(inpTime.value).getTime() : undefined,
     show_when_seconds: (showSecs == null ? "" : showSecs),
     stop_signal: cur.stop_signal || 0
   });
@@ -439,7 +441,7 @@ async function resetAll(){
 }
 
 function updateClock(){
-  const d = new Date();
+  const d = new Date(BroadcastSync.now());
   elClock.textContent = `${pad2(d.getHours())}:${pad2(d.getMinutes())}:${pad2(d.getSeconds())}`;
 }
 setInterval(updateClock, 1000);
@@ -462,12 +464,7 @@ async function poll(){
       return;
     }
 
-    const [datePart, timePart] = String(s.target_time).split("T");
-    const [Y,M,D] = datePart.split("-").map(Number);
-    const [hh,mm,ss] = timePart.split(":").map(Number);
-    const targetMs = new Date(Y, M-1, D, hh, mm, ss || 0).getTime();
-
-    const diff = targetMs - Date.now();
+    const diff = BroadcastSync.remaining(s);
 
     // trava modo dias por target
     if (s.target_time !== cdLastTarget){
